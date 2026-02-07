@@ -12,6 +12,30 @@ const downloadLinkSchema = new mongoose.Schema({
   }
 });
 
+const episodeSchema = new mongoose.Schema({
+  episodeNumber: {
+    type: Number,
+    required: true
+  },
+  title: {
+    type: String,
+    required: true
+  },
+  downloadLinks: [downloadLinkSchema],
+  duration: {
+    type: String, // e.g., "45 min"
+    required: false
+  },
+  airDate: {
+    type: Date,
+    required: false
+  },
+  isActive: {
+    type: Boolean,
+    default: true
+  }
+});
+
 const movieSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -26,7 +50,7 @@ const movieSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['Movie', 'Web Series', 'Dubbed']
+    enum: ['Movie', 'Web Series', 'TV Series', 'Dubbed']
   },
   genre: [{
     type: String,
@@ -45,9 +69,28 @@ const movieSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Series-specific fields
+  totalEpisodes: {
+    type: Number,
+    required: false
+  },
+  seasons: {
+    type: Number,
+    required: false,
+    default: 1
+  },
+  episodes: [episodeSchema],
+  // For series, this indicates the current season
+  currentSeason: {
+    type: Number,
+    required: false,
+    default: 1
+  },
   fileSize: {
     type: String,
-    required: true
+    required: function() {
+      return this.category === 'Movie'; // Only required for movies
+    }
   },
   isTrending: {
     type: Boolean,
@@ -69,6 +112,32 @@ const movieSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+// Pre-save middleware to clean up fileSize for series
+movieSchema.pre('save', function(next) {
+  // Remove fileSize for series to avoid any validation issues
+  if (this.category !== 'Movie') {
+    this.fileSize = undefined;
+  }
+  
+  next();
+});
+
+// Pre-findOneAndUpdate middleware for update operations
+movieSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate();
+  
+  // Handle series updates - remove fileSize completely
+  if (update.category === 'Web Series' || update.category === 'TV Series') {
+    if (update.$set) {
+      delete update.$set.fileSize;
+    } else {
+      update.fileSize = undefined;
+    }
+  }
+  
+  next();
 });
 
 // Create indexes for better query performance

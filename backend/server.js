@@ -6,6 +6,7 @@ const compression = require('compression');
 
 const movieRoutes = require('./routes/movies');
 const categoryRoutes = require('./routes/categories');
+const notificationRoutes = require('./routes/notifications');
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/movie-dow
 // Routes
 app.use('/api/movies', movieRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/admin/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

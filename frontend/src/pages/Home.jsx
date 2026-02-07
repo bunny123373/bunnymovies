@@ -1,9 +1,12 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import CategoryBar from '../components/CategoryBar'
 import MovieSection from '../components/MovieSection'
 import FilterPanel from '../components/FilterPanel'
 import MetaTags from '../components/MetaTags'
-import { useMovies } from '../hooks/useMovies'
+import MovieCard from '../components/MovieCard'
+import SeriesCard from '../components/SeriesCard'
+import { useMovies, useSeries } from '../hooks/useMovies'
+import { useNewMovieNotifications } from '../hooks/useNewMovieNotifications'
 
 const Home = () => {
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -14,31 +17,87 @@ const Home = () => {
     year: '',
     quality: ''
   })
+  const [categories, setCategories] = useState([])
+  const [categoryMovies, setCategoryMovies] = useState({})
 
-  // Fetch trending movies
-  const { 
-    movies: trendingMovies, 
-    loading: trendingLoading, 
-    error: trendingError 
-  } = useMovies({ isTrending: 'true', limit: 12 })
+  // Fetch languages data
+  useEffect(() => {
+    const fetchLanguages = async () => {
+      try {
+        const response = await fetch('/api/categories')
+        const data = await response.json()
+        setCategories(data.languages || [])
+      } catch (error) {
+        console.error('Error fetching languages:', error)
+      }
+    }
+    fetchLanguages()
+  }, [])
 
-  // Fetch latest movies
+  // Fetch movies for each language category
+  useEffect(() => {
+    const fetchLanguageMovies = async () => {
+      if (categories.length === 0) return
+      
+      const moviesData = {}
+      for (const language of categories) {
+        const { movies } = await fetchMoviesByLanguage(language)
+        moviesData[language] = movies
+      }
+      setCategoryMovies(moviesData)
+    }
+
+    fetchLanguageMovies()
+  }, [categories])
+
+  // Helper function to fetch movies by language
+  const fetchMoviesByLanguage = async (language) => {
+    try {
+      const params = new URLSearchParams({
+        language,
+        limit: '8'
+      })
+      
+      const response = await fetch(`/api/movies?${params}`)
+      const data = await response.json()
+      return { movies: data.movies || [] }
+    } catch (error) {
+      console.error(`Error fetching ${language} movies:`, error)
+      return { movies: [] }
+    }
+  }
+
+  // Fetch latest movies for notifications
   const { 
     movies: latestMovies, 
     loading: latestLoading, 
     error: latestError 
   } = useMovies({ limit: 12 })
 
-  // Fetch featured/popular movies
-  const { 
-    movies: featuredMovies, 
-    loading: featuredLoading, 
-    error: featuredError 
-  } = useMovies({ isFeatured: 'true', limit: 12 })
+  // Show notifications for new movies
+  useNewMovieNotifications(latestMovies)
 
-  // Fetch category-filtered movies
+  // Fetch trending movies for hero section
   const { 
-    movies: categoryMovies, 
+    movies: trendingMovies, 
+    loading: trendingLoading, 
+    error: trendingError 
+  } = useMovies({ isTrending: 'true', limit: 6 })
+
+  // Fetch recent series
+  const { 
+    series: recentSeries, 
+    loading: seriesLoading, 
+    error: seriesError 
+  } = useSeries({ limit: 8 })
+  
+  console.log('Home component - recentSeries:', recentSeries)
+  console.log('Home component - seriesLoading:', seriesLoading)
+  console.log('Home component - seriesError:', seriesError)
+
+  // Fetch category-filtered movies when a category is selected
+  const { 
+    movies: filteredMovies, 
     loading: categoryLoading, 
     error: categoryError 
   } = useMovies({ 
@@ -124,61 +183,88 @@ const Home = () => {
                 />
               </div>
 
-              {/* Trending Section */}
-              {!selectedCategory && (
-                <MovieSection
-                  type="trending"
-                  movies={trendingMovies}
-                  loading={trendingLoading}
-                  error={trendingError}
-                  showViewAll={false}
-                />
-              )}
-
-              {/* Latest Section */}
-              {!selectedCategory && (
-                <MovieSection
-                  type="latest"
-                  movies={latestMovies}
-                  loading={latestLoading}
-                  error={latestError}
-                  showViewAll={false}
-                />
-              )}
-
-              {/* Popular Section */}
-              {!selectedCategory && (
-                <MovieSection
-                  type="popular"
-                  movies={featuredMovies}
-                  loading={featuredLoading}
-                  error={featuredError}
-                  showViewAll={false}
-                />
-              )}
-
-              {/* Category Section */}
-              {selectedCategory && (
+              {/* When a specific language category is selected */}
+              {selectedCategory ? (
                 <MovieSection
                   type={selectedCategory.toLowerCase()}
                   title={`${selectedCategory} Movies`}
-                  movies={categoryMovies}
+                  movies={filteredMovies}
                   loading={categoryLoading}
                   error={categoryError}
                   showViewAll={false}
                 />
-              )}
+              ) : (
+                <>
+                  {/* Trending Section */}
+                  <MovieSection
+                    type="trending"
+                    movies={trendingMovies}
+                    loading={trendingLoading}
+                    error={trendingError}
+                    showViewAll={false}
+                  />
 
-              {/* All Movies Section (when no category selected) */}
-              {!selectedCategory && (
-                <MovieSection
-                  type="default"
-                  title="All Movies"
-                  movies={latestMovies}
-                  loading={latestLoading}
-                  error={latestError}
-                  showViewAll={false}
-                />
+                  {/* Recent Series Section */}
+                  <div className="mb-12">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Recent Series</h2>
+                        <p className="text-gray-600 mt-1">Latest web and TV series added</p>
+                      </div>
+                      <a
+                        href="/series"
+                        className="text-primary-600 hover:text-primary-700 font-medium flex items-center space-x-1"
+                      >
+                        <span>View All</span>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </a>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {seriesLoading && recentSeries.length === 0 ? (
+                        [...Array(6)].map((_, i) => (
+                          <div key={i} className="animate-pulse">
+                            <div className="bg-gray-200 aspect-[2/3] rounded-lg mb-3"></div>
+                            <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                            <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                          </div>
+                        ))
+                      ) : seriesError ? (
+                        <div className="col-span-full text-center py-8">
+                          <p className="text-red-600">Failed to load series</p>
+                        </div>
+                      ) : recentSeries.length === 0 && !seriesLoading ? (
+                        <div className="col-span-full text-center py-8">
+                          <p className="text-gray-500">No series available</p>
+                        </div>
+                      ) : (
+                        recentSeries.map((seriesItem) => (
+                          <SeriesCard 
+                            key={seriesItem._id} 
+                            series={seriesItem}
+                            showQuality={false}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Language-wise Sections */}
+                  {categories.map((language) => (
+                    <MovieSection
+                      key={language}
+                      type={language.toLowerCase()}
+                      title={`${language} Movies`}
+                      movies={categoryMovies[language] || []}
+                      loading={!categoryMovies[language]}
+                      error={null}
+                      showViewAll={true}
+                      viewAllLink={`/movies?language=${encodeURIComponent(language)}`}
+                    />
+                  ))}
+                </>
               )}
             </main>
           </div>

@@ -210,6 +210,83 @@ export const useStats = () => {
   return { stats, loading, error, refetch: () => fetchStats() }
 }
 
+export const useSeries = (filters = {}) => {
+  const [series, setSeries] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [pagination, setPagination] = useState(null)
+  const isInitialLoadRef = useRef(true)
+
+  const fetchSeries = useCallback(async (isInitial = false) => {
+    try {
+      if (isInitial) {
+        setLoading(true)
+      }
+      const params = new URLSearchParams()
+      
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params.append(key, value)
+        }
+      })
+
+      const response = await api.get(`/movies/series?${params.toString()}`)
+      console.log('Series API Response:', response.data)
+      setSeries(response.data.series)
+      setPagination({
+        total: response.data.total,
+        page: response.data.page,
+        pages: response.data.pages
+      })
+      setError(null)
+    } catch (err) {
+      console.error('Failed to fetch series:', err)
+      setError(err.response?.data?.message || 'Failed to fetch series')
+    } finally {
+      setLoading(false)
+    }
+  }, [filters])
+
+  useEffect(() => {
+    if (isInitialLoadRef.current) {
+      isInitialLoadRef.current = false
+      fetchSeries(true)
+    }
+  }, [fetchSeries])
+
+  return { series, loading, error, pagination, refetch: () => fetchSeries(false) }
+}
+
+export const useSeriesDetails = (id) => {
+  const [series, setSeries] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const fetchSeries = async () => {
+      try {
+        setLoading(true)
+        const response = await api.get(`/movies/${id}`)
+        setSeries(response.data)
+        setError(null)
+    } catch (err) {
+      console.error('Failed to fetch series details:', err)
+      console.error('Error response:', err.response)
+      console.error('Request URL:', `${API_URL}/movies/${id}`)
+      setError(err.response?.data?.message || 'Failed to fetch series details')
+    } finally {
+      setLoading(false)
+    }
+    }
+
+    if (id) {
+      fetchSeries()
+    }
+  }, [id])
+
+  return { series, loading, error }
+}
+
 export const incrementDownloadCount = async (movieId) => {
   try {
     await api.post(`/movies/${movieId}/download`)

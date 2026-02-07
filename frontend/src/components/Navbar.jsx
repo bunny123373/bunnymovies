@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Search, Heart, Menu, X, Film } from 'lucide-react'
+import { Search, Heart, Menu, X, Film, HelpCircle } from 'lucide-react'
 import { useSearchSuggestions } from '../hooks/useMovies'
+import NotificationSettings from './NotificationSettings'
 
 const Navbar = () => {
   const [searchQuery, setSearchQuery] = useState('')
@@ -41,6 +42,7 @@ const Navbar = () => {
   const navLinks = [
     { to: '/', label: 'Home' },
     { to: '/watchlist', label: 'Watchlist' },
+    { to: '/support', label: 'Support', icon: HelpCircle },
   ]
 
   return (
@@ -120,9 +122,11 @@ const Navbar = () => {
                 }`}
               >
                 {link.to === '/watchlist' && <Heart className="w-4 h-4" />}
+                {link.to === '/support' && link.icon && <link.icon className="w-4 h-4" />}
                 <span>{link.label}</span>
               </Link>
             ))}
+            <NotificationSettings />
           </div>
 
           {/* Mobile Menu Button */}
@@ -199,9 +203,13 @@ const Navbar = () => {
                 }`}
               >
                 {link.to === '/watchlist' && <Heart className="w-5 h-5" />}
+                {link.to === '/support' && link.icon && <link.icon className="w-5 h-5" />}
                 <span className="font-medium">{link.label}</span>
               </Link>
             ))}
+            <div className="px-4 py-3">
+              <NotificationSettings />
+            </div>
           </div>
         </div>
       )}

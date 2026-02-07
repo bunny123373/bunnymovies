@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Heart, Download, Play, Eye } from 'lucide-react'
 import { useWatchlist } from '../contexts/WatchlistContext'
 
-const MovieCard = ({ movie, showQuality = true }) => {
+const MovieCard = ({ movie, showQuality = true, compact = false }) => {
   const { toggleWatchlist, isInWatchlist } = useWatchlist()
   const [imageLoaded, setImageLoaded] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
@@ -37,9 +37,73 @@ const MovieCard = ({ movie, showQuality = true }) => {
     }
   }
 
+  if (compact) {
+    return (
+      <Link
+        to={`/movie/${movie._id}`}
+        className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="w-12 h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden">
+          <img
+            src={movie.posterUrl}
+            alt={movie.title}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm font-medium text-gray-900 line-clamp-1">
+            {movie.title}
+          </h4>
+          <div className="flex items-center space-x-2 mt-1">
+            <span className={`badge text-xs ${getLanguageColor(movie.language)}`}>
+              {movie.language}
+            </span>
+            <span className="text-xs text-gray-500">{movie.year}</span>
+          </div>
+        </div>
+      </Link>
+    )
+  }
+
+  const isSeries = movie.category === 'Web Series' || movie.category === 'TV Series'
+  const detailPath = isSeries ? `/series/${movie._id}` : `/movie/${movie._id}`
+
+  if (compact) {
+    return (
+      <Link
+        to={detailPath}
+        className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+      >
+        <div className="w-12 h-16 flex-shrink-0 bg-gray-100 rounded overflow-hidden">
+          <img
+            src={movie.posterUrl}
+            alt={movie.title}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="text-sm font-medium text-gray-900 line-clamp-1">
+            {movie.title}
+          </h4>
+          <div className="flex items-center space-x-2 mt-1">
+            <span className={`badge text-xs ${getLanguageColor(movie.language)}`}>
+              {movie.language}
+            </span>
+            <span className="text-xs text-gray-500">{movie.year}</span>
+            {isSeries && (
+              <span className="badge text-xs bg-indigo-100 text-indigo-700">
+                {movie.totalEpisodes || 0} Ep
+              </span>
+            )}
+          </div>
+        </div>
+      </Link>
+    )
+  }
+
   return (
     <Link
-      to={`/movie/${movie._id}`}
+      to={detailPath}
       className="group block"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -67,7 +131,9 @@ const MovieCard = ({ movie, showQuality = true }) => {
               <div className="flex items-center justify-between">
                 <button className="flex items-center space-x-1 bg-white/20 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors">
                   <Eye className="w-4 h-4" />
-                  <span className="text-sm font-medium">View Details</span>
+                  <span className="text-sm font-medium">
+                    {isSeries ? 'View Episodes' : 'View Details'}
+                  </span>
                 </button>
               </div>
             </div>
@@ -102,6 +168,15 @@ const MovieCard = ({ movie, showQuality = true }) => {
               </span>
             </div>
           )}
+
+          {/* Series Type Badge */}
+          {isSeries && (
+            <div className="absolute bottom-3 left-3">
+              <span className="badge text-xs bg-indigo-600 text-white">
+                {movie.category}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -117,10 +192,15 @@ const MovieCard = ({ movie, showQuality = true }) => {
               {movie.language}
             </span>
             <span className="text-xs text-gray-500">{movie.year}</span>
+            {isSeries && movie.totalEpisodes && (
+              <span className="badge text-xs bg-indigo-100 text-indigo-700">
+                {movie.totalEpisodes} Episodes
+              </span>
+            )}
           </div>
 
-          {/* Quality Tags */}
-          {showQuality && movie.downloadLinks && movie.downloadLinks.length > 0 && (
+          {/* Quality Tags (only for movies) */}
+          {showQuality && !isSeries && movie.downloadLinks && movie.downloadLinks.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {movie.downloadLinks.slice(0, 3).map((link, index) => (
                 <span
@@ -138,13 +218,25 @@ const MovieCard = ({ movie, showQuality = true }) => {
             </div>
           )}
 
+          {/* Series Info (for series) */}
+          {isSeries && (
+            <div className="text-sm text-gray-600 mt-3">
+              {movie.seasons > 1 && (
+                <span>{movie.seasons} Seasons • </span>
+              )}
+              <span>{movie.totalEpisodes || 0} Episodes</span>
+            </div>
+          )}
+
           {/* Download Count */}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
             <div className="flex items-center space-x-1 text-sm text-gray-500">
               <Download className="w-4 h-4" />
               <span>{movie.downloadCount?.toLocaleString() || 0}</span>
             </div>
-            <div className="text-sm text-gray-500">{movie.fileSize}</div>
+            {!isSeries && (
+              <div className="text-sm text-gray-500">{movie.fileSize}</div>
+            )}
           </div>
         </div>
       </div>

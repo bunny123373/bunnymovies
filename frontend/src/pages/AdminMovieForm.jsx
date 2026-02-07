@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Plus, X, Upload, Film, Check } from 'lucide-react'
 import { useMovie, createMovie, updateMovie } from '../hooks/useMovies'
+import { useNotificationEvent } from '../context/NotificationEventContext'
 
 const AdminMovieForm = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const isEditMode = Boolean(id)
+  const { notifyMovieUploaded } = useNotificationEvent()
   
   const { movie, loading: movieLoading } = useMovie(id)
   const adminKey = localStorage.getItem('adminKey') || ''
@@ -23,7 +25,12 @@ const AdminMovieForm = () => {
     fileSize: '',
     isTrending: false,
     isFeatured: false,
-    isActive: true
+    isActive: true,
+    // Series-specific fields
+    totalEpisodes: '',
+    seasons: 1,
+    currentSeason: 1,
+    episodes: []
   })
 
   const [loading, setLoading] = useState(false)
@@ -31,7 +38,7 @@ const AdminMovieForm = () => {
   const [success, setSuccess] = useState('')
 
   const languages = ['Telugu', 'Tamil', 'Hindi', 'English', 'Dubbed']
-  const categories = ['Movie', 'Web Series', 'Dubbed']
+  const categories = ['Movie', 'Web Series', 'TV Series', 'Dubbed']
   const genres = ['Action', 'Comedy', 'Romance', 'Thriller', 'Horror', 'Drama', 'Sci-Fi', 'Adventure']
   const qualities = ['480p', '720p', '1080p', '4K']
 
@@ -51,7 +58,12 @@ const AdminMovieForm = () => {
         fileSize: movie.fileSize || '',
         isTrending: movie.isTrending || false,
         isFeatured: movie.isFeatured || false,
-        isActive: movie.isActive !== false
+        isActive: movie.isActive !== false,
+        // Series-specific fields
+        totalEpisodes: movie.totalEpisodes || '',
+        seasons: movie.seasons || 1,
+        currentSeason: movie.currentSeason || 1,
+        episodes: movie.episodes || []
       })
     }
   }, [movie, isEditMode])
@@ -96,6 +108,82 @@ const AdminMovieForm = () => {
     }))
   }
 
+  // Episode management functions
+  const addEpisode = () => {
+    const newEpisodeNumber = formData.episodes.length + 1
+    setFormData(prev => ({
+      ...prev,
+      episodes: [...prev.episodes, {
+        episodeNumber: newEpisodeNumber,
+        title: '',
+        downloadLinks: [{ quality: '720p', url: '' }],
+        duration: '',
+        airDate: '',
+        isActive: true
+      }]
+    }))
+  }
+
+  const removeEpisode = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      episodes: prev.episodes.filter((_, i) => i !== index)
+    }))
+  }
+
+  const handleEpisodeChange = (index, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      episodes: prev.episodes.map((episode, i) => 
+        i === index ? { ...episode, [field]: value } : episode
+      )
+    }))
+  }
+
+  const handleEpisodeDownloadLinkChange = (episodeIndex, linkIndex, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      episodes: prev.episodes.map((episode, i) => 
+        i === episodeIndex 
+          ? {
+              ...episode,
+              downloadLinks: episode.downloadLinks.map((link, j) => 
+                j === linkIndex ? { ...link, [field]: value } : link
+              )
+            }
+          : episode
+      )
+    }))
+  }
+
+  const addEpisodeDownloadLink = (episodeIndex) => {
+    setFormData(prev => ({
+      ...prev,
+      episodes: prev.episodes.map((episode, i) => 
+        i === episodeIndex 
+          ? {
+              ...episode,
+              downloadLinks: [...episode.downloadLinks, { quality: '720p', url: '' }]
+            }
+          : episode
+      )
+    }))
+  }
+
+  const removeEpisodeDownloadLink = (episodeIndex, linkIndex) => {
+    setFormData(prev => ({
+      ...prev,
+      episodes: prev.episodes.map((episode, i) => 
+        i === episodeIndex 
+          ? {
+              ...episode,
+              downloadLinks: episode.downloadLinks.filter((_, j) => j !== linkIndex)
+            }
+          : episode
+      )
+    }))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -107,24 +195,72 @@ const AdminMovieForm = () => {
       if (!formData.title.trim()) throw new Error('Title is required')
       if (!formData.posterUrl.trim()) throw new Error('Poster URL is required')
       if (!formData.description.trim()) throw new Error('Description is required')
-      if (!formData.fileSize.trim()) throw new Error('File size is required')
+      
+      // For movies, file size is required
+      if (formData.category === 'Movie' && !formData.fileSize.trim()) {
+        throw new Error('File size is required for movies')
+      }
+      
       if (!formData.genre || formData.genre.length === 0) throw new Error('At least one genre is required')
       
-      const invalidLinks = formData.downloadLinks.filter(link => !link.url.trim())
-      if (invalidLinks.length > 0) throw new Error('All download links must have a URL')
+      // For series, validate episodes
+      if ((formData.category === 'Web Series' || formData.category === 'TV Series')) {
+        if (!formData.totalEpisodes || formData.totalEpisodes <= 0) {
+          throw new Error('Total episodes is required for series')
+        }
+        if (formData.episodes.length === 0) {
+          throw new Error('At least one episode is required for series')
+        }
+        
+        // Validate each episode
+        for (let i = 0; i < formData.episodes.length; i++) {
+          const episode = formData.episodes[i]
+          if (!episode.title.trim()) {
+            throw new Error(`Episode ${episode.episodeNumber} title is required`)
+          }
+          const invalidEpisodeLinks = episode.downloadLinks.filter(link => !link.url.trim())
+          if (invalidEpisodeLinks.length > 0) {
+            throw new Error(`All download links for episode ${episode.episodeNumber} must have a URL`)
+          }
+        }
+      } else {
+        // For movies, validate download links
+        const invalidLinks = formData.downloadLinks.filter(link => !link.url.trim())
+        if (invalidLinks.length > 0) throw new Error('All download links must have a URL')
+      }
 
       // Prepare data for submission
       const submissionData = {
-        ...formData,
-        downloadLinks: formData.downloadLinks.filter(link => link.url.trim())
+        ...formData
+      }
+      
+      // Only include relevant fields based on category
+      if (formData.category === 'Movie') {
+        submissionData.downloadLinks = formData.downloadLinks.filter(link => link.url.trim())
+        delete submissionData.episodes
+        delete submissionData.totalEpisodes
+        delete submissionData.seasons
+        delete submissionData.currentSeason
+      } else {
+        // For series, clean up episode data and remove movie-specific fields
+        submissionData.episodes = formData.episodes.map(episode => ({
+          ...episode,
+          downloadLinks: episode.downloadLinks.filter(link => link.url.trim())
+        }))
+        delete submissionData.downloadLinks // Remove movie-level download links for series
+        delete submissionData.fileSize // Remove fileSize for series
       }
 
       if (isEditMode) {
         await updateMovie(id, submissionData, adminKey)
         setSuccess('Movie updated successfully!')
       } else {
-        await createMovie(submissionData, adminKey)
+        const newMovie = await createMovie(submissionData, adminKey)
         setSuccess('Movie created successfully!')
+        // Trigger notification for new movie upload
+        if (newMovie) {
+          notifyMovieUploaded(newMovie)
+        }
         // Reset form after creation
         if (!isEditMode) {
           setFormData({
@@ -139,7 +275,11 @@ const AdminMovieForm = () => {
             fileSize: '',
             isTrending: false,
             isFeatured: false,
-            isActive: true
+            isActive: true,
+            totalEpisodes: '',
+            seasons: 1,
+            currentSeason: 1,
+            episodes: []
           })
         }
       }
@@ -276,21 +416,23 @@ const AdminMovieForm = () => {
                 />
               </div>
 
-              {/* File Size */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  File Size *
-                </label>
-                <input
-                  type="text"
-                  name="fileSize"
-                  value={formData.fileSize}
-                  onChange={handleChange}
-                  placeholder="e.g., 1.2 GB"
-                  className="input"
-                  required
-                />
-              </div>
+              {/* File Size (only for movies) */}
+              {formData.category === 'Movie' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    File Size *
+                  </label>
+                  <input
+                    type="text"
+                    name="fileSize"
+                    value={formData.fileSize}
+                    onChange={handleChange}
+                    placeholder="e.g., 1.2 GB"
+                    className="input"
+                    required={formData.category === 'Movie'}
+                  />
+                </div>
+              )}
 
               {/* Poster URL */}
               <div className="md:col-span-2">
@@ -336,6 +478,200 @@ const AdminMovieForm = () => {
             </div>
           </div>
 
+          {/* Series Information (only show for Web Series/TV Series) */}
+          {(formData.category === 'Web Series' || formData.category === 'TV Series') && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Series Information</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Total Episodes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Total Episodes *
+                  </label>
+                  <input
+                    type="number"
+                    name="totalEpisodes"
+                    value={formData.totalEpisodes}
+                    onChange={handleChange}
+                    min="1"
+                    placeholder="e.g., 10"
+                    className="input"
+                    required={(formData.category === 'Web Series' || formData.category === 'TV Series')}
+                  />
+                </div>
+
+                {/* Seasons */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Number of Seasons
+                  </label>
+                  <input
+                    type="number"
+                    name="seasons"
+                    value={formData.seasons}
+                    onChange={handleChange}
+                    min="1"
+                    placeholder="e.g., 2"
+                    className="input"
+                  />
+                </div>
+
+                {/* Current Season */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Current Season
+                  </label>
+                  <input
+                    type="number"
+                    name="currentSeason"
+                    value={formData.currentSeason}
+                    onChange={handleChange}
+                    min="1"
+                    placeholder="e.g., 1"
+                    className="input"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Episodes (only show for Web Series/TV Series) */}
+          {(formData.category === 'Web Series' || formData.category === 'TV Series') && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Episodes *</h2>
+                <button
+                  type="button"
+                  onClick={addEpisode}
+                  className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Add Episode</span>
+                </button>
+              </div>
+              
+              {formData.episodes.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+                  <Film className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-600 mb-4">No episodes added yet</p>
+                  <button
+                    type="button"
+                    onClick={addEpisode}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Add First Episode
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {formData.episodes.map((episode, episodeIndex) => (
+                    <div key={episodeIndex} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-medium text-gray-900">
+                          Episode {episode.episodeNumber}
+                        </h3>
+                        {formData.episodes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeEpisode(episodeIndex)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        {/* Episode Title */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Episode Title *
+                          </label>
+                          <input
+                            type="text"
+                            value={episode.title}
+                            onChange={(e) => handleEpisodeChange(episodeIndex, 'title', e.target.value)}
+                            placeholder="Enter episode title"
+                            className="input"
+                            required
+                          />
+                        </div>
+
+                        {/* Duration */}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Duration
+                          </label>
+                          <input
+                            type="text"
+                            value={episode.duration}
+                            onChange={(e) => handleEpisodeChange(episodeIndex, 'duration', e.target.value)}
+                            placeholder="e.g., 45 min"
+                            className="input"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Episode Download Links */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Download Links *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => addEpisodeDownloadLink(episodeIndex)}
+                            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            Add Link
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {episode.downloadLinks.map((link, linkIndex) => (
+                            <div key={linkIndex} className="flex items-start space-x-3">
+                              <div className="w-24 flex-shrink-0">
+                                <select
+                                  value={link.quality}
+                                  onChange={(e) => handleEpisodeDownloadLinkChange(episodeIndex, linkIndex, 'quality', e.target.value)}
+                                  className="input text-sm"
+                                >
+                                  {qualities.map(q => (
+                                    <option key={q} value={q}>{q}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <input
+                                  type="url"
+                                  value={link.url}
+                                  onChange={(e) => handleEpisodeDownloadLinkChange(episodeIndex, linkIndex, 'url', e.target.value)}
+                                  placeholder="Google Drive share link"
+                                  className="input text-sm"
+                                  required
+                                />
+                              </div>
+                              {episode.downloadLinks.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeEpisodeDownloadLink(episodeIndex, linkIndex)}
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Genre */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Genre</h2>
@@ -357,56 +693,58 @@ const AdminMovieForm = () => {
             </div>
           </div>
 
-          {/* Download Links */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Download Links *</h2>
-              <button
-                type="button"
-                onClick={addDownloadLink}
-                className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Add Link</span>
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {formData.downloadLinks.map((link, index) => (
-                <div key={index} className="flex items-start space-x-4">
-                  <div className="w-32 flex-shrink-0">
-                    <select
-                      value={link.quality}
-                      onChange={(e) => handleDownloadLinkChange(index, 'quality', e.target.value)}
-                      className="input"
-                    >
-                      {qualities.map(q => (
-                        <option key={q} value={q}>{q}</option>
-                      ))}
-                    </select>
+          {/* Download Links (only show for Movies) */}
+          {formData.category === 'Movie' && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Download Links *</h2>
+                <button
+                  type="button"
+                  onClick={addDownloadLink}
+                  className="flex items-center space-x-2 text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Add Link</span>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {formData.downloadLinks.map((link, index) => (
+                  <div key={index} className="flex items-start space-x-4">
+                    <div className="w-32 flex-shrink-0">
+                      <select
+                        value={link.quality}
+                        onChange={(e) => handleDownloadLinkChange(index, 'quality', e.target.value)}
+                        className="input"
+                      >
+                        {qualities.map(q => (
+                          <option key={q} value={q}>{q}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="url"
+                        value={link.url}
+                        onChange={(e) => handleDownloadLinkChange(index, 'url', e.target.value)}
+                        placeholder="Google Drive share link"
+                        className="input"
+                      />
+                    </div>
+                    {formData.downloadLinks.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeDownloadLink(index)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
-                  <div className="flex-1">
-                    <input
-                      type="url"
-                      value={link.url}
-                      onChange={(e) => handleDownloadLinkChange(index, 'url', e.target.value)}
-                      placeholder="Google Drive share link"
-                      className="input"
-                    />
-                  </div>
-                  {formData.downloadLinks.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeDownloadLink(index)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Settings */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
