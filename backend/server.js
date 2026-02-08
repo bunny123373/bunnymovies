@@ -20,28 +20,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/movie-download-db')
-  .then(async () => {
+  .then(() => {
     console.log('MongoDB Connected');
-    
-    // Drop any problematic text indexes
-    try {
-      const db = mongoose.connection.db;
-      const collections = await db.listCollections().toArray();
-      
-      for (const collection of collections) {
-        if (collection.name === 'movies') {
-          const indexes = await db.collection(collection.name).listIndexes().toArray();
-          for (const index of indexes) {
-            if (index.textIndexVersion) {
-              console.log('Dropping text index:', index.name);
-              await db.collection(collection.name).dropIndex(index.name);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.log('No problematic indexes found or error dropping indexes:', error.message);
-    }
   })
   .catch(err => console.error('MongoDB Connection Error:', err));
 
@@ -65,4 +45,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`API available at: http://localhost:${PORT}/api`);
 });

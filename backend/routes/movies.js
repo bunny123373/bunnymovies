@@ -110,6 +110,7 @@ router.get('/related/:id', async (req, res) => {
 // GET /api/movies/series - Get all series (Public)
 router.get('/series', async (req, res) => {
   try {
+    console.log('Fetching series with params:', req.query);
     const { language, genre, year, limit = 50, page = 1 } = req.query;
 
     const query = { 
@@ -123,6 +124,7 @@ router.get('/series', async (req, res) => {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
+    console.log('Series query:', query);
     const series = await Movie.find(query)
       .select('title language category genre year posterUrl description totalEpisodes seasons isTrending isFeatured createdAt')
       .sort({ createdAt: -1 })
@@ -131,6 +133,7 @@ router.get('/series', async (req, res) => {
 
     const total = await Movie.countDocuments(query);
 
+    console.log('Found series:', series.length);
     res.json({
       series,
       total,
@@ -138,6 +141,7 @@ router.get('/series', async (req, res) => {
       pages: Math.ceil(total / parseInt(limit))
     });
   } catch (error) {
+    console.error('Error fetching series:', error);
     res.status(500).json({ message: error.message });
   }
 });

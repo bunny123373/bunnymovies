@@ -90,6 +90,17 @@ const movieSchema = new mongoose.Schema({
     type: String,
     required: function() {
       return this.category === 'Movie'; // Only required for movies
+    },
+    validate: {
+      validator: function(v) {
+        // If category is Movie, fileSize is required
+        if (this.category === 'Movie') {
+          return v && v.trim().length > 0;
+        }
+        // For series, fileSize can be empty or undefined
+        return true;
+      },
+      message: 'File size is required for movies'
     }
   },
   isTrending: {
